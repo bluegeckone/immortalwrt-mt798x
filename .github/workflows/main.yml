@@ -32,15 +32,15 @@ jobs:
         run: |
           cd openwrt
           rm -f .config
-          # 1. 明确指定红米 AX6000 的大分区 (ubootlayout) 目标
-          echo "CONFIG_TARGET_mediatek=y" > .config
-          echo "CONFIG_TARGET_mediatek_mt7986=y" >> .config
-          echo "CONFIG_TARGET_DEVICE_mediatek_mt7986_DEVICE_xiaomi_redmi-router-ax6000-ubootlayout=y" >> .config
-          echo "CONFIG_TARGET_mediatek_mt7986_DEVICE_xiaomi_redmi-router-ax6000-ubootlayout=y" >> .config
-          echo "CONFIG_PACKAGE_luci=y" >> .config
-          echo "CONFIG_PACKAGE_luci-i18n-base-zh-cn=y" >> .config
-          
-          # 2. 强行补全配置
+          # 使用 hanwckf 预设的大分区目标定义
+          make defconfig
+          cat <<EOF > .config
+          CONFIG_TARGET_mediatek=y
+          CONFIG_TARGET_mediatek_mt7986=y
+          CONFIG_TARGET_mediatek_mt7986_DEVICE_xiaomi_redmi-router-ax6000-ubootlayout=y
+          CONFIG_PACKAGE_luci=y
+          CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
+          EOF
           make defconfig
 
       - name: Download Packages
@@ -51,17 +51,20 @@ jobs:
       - name: Compile Firmware
         run: |
           cd openwrt
-          make -j$(nproc) || make -j1 V=s
+          # 加上 PROFILE 保证只编译红米 AX6000 112M 大分区
+          make -j$(nproc) PROFILE="xiaomi_redmi-router-ax6000-ubootlayout" || make -j1 V=s PROFILE="xiaomi_redmi-router-ax6000-ubootlayout"
 
       - name: Organize Artifacts
         run: |
-          cd openwrt/bin/targets/mediatek/mt7986
           mkdir -p /tmp/firmware
-          # 提取红米 AX6000 专用的所有镜像文件
-          cp -f *redmi-router-ax6000* /tmp/firmware/ 2>/dev/null || true
+          cd openwrt/bin/targets/mediatek/mt7986/
+          # 打印编译出来的所有文件，方便查验
+          ls -la
+          # 将所有生成的镜像文件复制出来
+          cp -f * /tmp/firmware/ 2>/dev/null || true
 
       - name: Upload Firmware to Actions Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Redmi-AX6000-112M-Firmware
-          path: /tmp/firmware/*
+          path: /tmp/firmware/
