@@ -23,7 +23,8 @@ jobs:
 
       - name: Clone Source Code
         run: |
-          git clone https://github.com/hanwckf/immortalwrt-mt798x.git openwrt
+          # 直接拉取你自己仓库的代码
+          git clone https://github.com/bluegeckone/immortalwrt-mt798x.git openwrt
           cd openwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
@@ -32,19 +33,22 @@ jobs:
         run: |
           cd openwrt
           rm -f .config
-          # 1. 明确目标设备
+          
+          # 1. 明确红米 AX6000 112M 大分区设备
           echo "CONFIG_TARGET_mediatek=y" > .config
           echo "CONFIG_TARGET_mediatek_mt7986=y" >> .config
           echo "CONFIG_TARGET_mediatek_mt7986_DEVICE_xiaomi_redmi-router-ax6000-ubootlayout=y" >> .config
           
-          # 2. 强制开启 RootFS Squashfs 根文件系统打包（核心修复：防止只生成 7M 内核）
+          # 2. 强制开启 RootFS 镜像打包（关键：避免只生成 7M 内核）
           echo "CONFIG_TARGET_ROOTFS_SQUASHFS=y" >> .config
           echo "CONFIG_TARGET_UBIFS_FREE_SPACE_FIXUP=y" >> .config
           
-          # 3. 勾选中文 LuCI Web 管理界面
+          # 3. 勾选 Web 后台及必备基础组件
           echo "CONFIG_PACKAGE_luci=y" >> .config
           echo "CONFIG_PACKAGE_luci-i18n-base-zh-cn=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-opkg=y" >> .config
           
+          # 自动补全并应用依赖
           make defconfig
 
       - name: Download Packages
@@ -61,9 +65,10 @@ jobs:
         run: |
           mkdir -p /tmp/firmware
           cd openwrt/bin/targets/mediatek/mt7986/
-          ls -lh # 打印文件大小供查验
-          # 仅提取包含 sysupgrade 的完整镜像
-          cp -f *sysupgrade.bin /tmp/firmware/ 2>/dev/null || true
+          # 打印目录下所有生成的镜像和真实文件大小
+          ls -lh
+          # 复制所有 bin 固件文件
+          cp -f *.bin /tmp/firmware/ 2>/dev/null || true
 
       - name: Upload Firmware to Actions Artifacts
         uses: actions/upload-artifact@v4
