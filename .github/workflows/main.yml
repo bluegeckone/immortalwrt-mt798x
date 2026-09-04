@@ -23,7 +23,6 @@ jobs:
 
       - name: Clone Source Code
         run: |
-          # 直接拉取你自己仓库的代码
           git clone https://github.com/bluegeckone/immortalwrt-mt798x.git openwrt
           cd openwrt
           ./scripts/feeds update -a
@@ -34,21 +33,26 @@ jobs:
           cd openwrt
           rm -f .config
           
-          # 1. 明确红米 AX6000 112M 大分区设备
-          echo "CONFIG_TARGET_mediatek=y" > .config
-          echo "CONFIG_TARGET_mediatek_mt7986=y" >> .config
-          echo "CONFIG_TARGET_mediatek_mt7986_DEVICE_xiaomi_redmi-router-ax6000-ubootlayout=y" >> .config
+          # 检查源码中是否存在预置的 AX6000 配置文件，如果有直接使用，没有则写入完整设备块
+          if [ -f "defconfig/mt7986-ax6000" ]; then
+            cp defconfig/mt7986-ax6000 .config
+          elif [ -f "configs/mt7986_xiaomi_ax6000.config" ]; then
+            cp configs/mt7986_xiaomi_ax6000.config .config
+          else
+            # 完整写入 MediaTek 与 AX6000 ubootlayout 依赖节点
+            cat <<EOF > .config
+          CONFIG_TARGET_mediatek=y
+          CONFIG_TARGET_mediatek_mt7986=y
+          CONFIG_TARGET_mediatek_mt7986_DEVICE_xiaomi_redmi-router-ax6000-ubootlayout=y
+          CONFIG_TARGET_MULTI_PROFILE=y
+          CONFIG_TARGET_DEVICE_mediatek_mt7986_DEVICE_xiaomi_redmi-router-ax6000-ubootlayout=y
+          CONFIG_TARGET_ROOTFS_SQUASHFS=y
+          CONFIG_PACKAGE_luci=y
+          CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
+          EOF
+          fi
           
-          # 2. 强制开启 RootFS 镜像打包（关键：避免只生成 7M 内核）
-          echo "CONFIG_TARGET_ROOTFS_SQUASHFS=y" >> .config
-          echo "CONFIG_TARGET_UBIFS_FREE_SPACE_FIXUP=y" >> .config
-          
-          # 3. 勾选 Web 后台及必备基础组件
-          echo "CONFIG_PACKAGE_luci=y" >> .config
-          echo "CONFIG_PACKAGE_luci-i18n-base-zh-cn=y" >> .config
-          echo "CONFIG_PACKAGE_luci-app-opkg=y" >> .config
-          
-          # 自动补全并应用依赖
+          # 扩展补全依赖项
           make defconfig
 
       - name: Download Packages
@@ -59,16 +63,17 @@ jobs:
       - name: Compile Firmware
         run: |
           cd openwrt
-          make -j$(nproc) || make -j1 V=s
+          # 指定 PROFILE 参数强行触发 RootFS 镜像生成
+          make -j$(nproc) PROFILE="xiaomi_redmi-router-ax6000-ubootlayout" || make -j1 V=s PROFILE="xiaomi_redmi-router-ax6000-ubootlayout"
 
       - name: Organize Artifacts
         run: |
           mkdir -p /tmp/firmware
           cd openwrt/bin/targets/mediatek/mt7986/
-          # 打印目录下所有生成的镜像和真实文件大小
+          # 打印目录下生成的所有文件及其大小
           ls -lh
-          # 复制所有 bin 固件文件
-          cp -f *.bin /tmp/firmware/ 2>/dev/null || true
+          # 拷贝所有生成的镜像
+          cp -f *redmi-router-ax6000* /tmp/firmware/ 2>/dev/null || cp -f *.bin /tmp/firmware/ 2>/dev/null || true
 
       - name: Upload Firmware to Actions Artifacts
         uses: actions/upload-artifact@v4
